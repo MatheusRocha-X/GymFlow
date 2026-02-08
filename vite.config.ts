@@ -3,7 +3,20 @@ import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig({
-  base: process.env.GITHUB_PAGES === 'true' ? '/GymAPP/' : '/',
+  base: '/',
+  build: {
+    target: 'es2015',
+    cssTarget: 'chrome61',
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom'],
+          recharts: ['recharts'],
+          dexie: ['dexie', 'dexie-react-hooks']
+        }
+      }
+    }
+  },
   plugins: [
     react(),
     VitePWA({
