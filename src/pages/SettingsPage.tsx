@@ -40,23 +40,6 @@ export default function SettingsPage() {
     }
   };
 
-  const handleOpenPix = () => {
-    // Tenta abrir no app do banco (alguns navegadores/sistemas suportam)
-    // Se não funcionar, copia automaticamente
-    const pixUrl = `https://nubank.com.br/pagar/${btoa(pixCode)}`;
-    
-    // Tenta abrir em nova aba
-    const newWindow = window.open(pixUrl, '_blank');
-    
-    // Se não conseguir abrir (bloqueado), copia o código
-    if (!newWindow) {
-      handleCopyPix();
-    } else {
-      // Também copia para facilitar
-      navigator.clipboard.writeText(pixCode).catch(() => {});
-    }
-  };
-
   const handleClearAllData = async () => {
     const confirmed = window.confirm(
       '⚠️ ATENÇÃO!\n\nIsto irá apagar TODOS os seus dados:\n• Rotinas de treino\n• Histórico de treinos\n• Lembretes\n• Configurações de hidratação\n• Logs de água\n• Configurações do Telegram\n\nEsta ação NÃO pode ser desfeita!\n\nDeseja realmente continuar?'
@@ -403,38 +386,26 @@ export default function SettingsPage() {
                 </div>
               </div>
 
-              <div className="flex flex-col sm:flex-row gap-2">
-                <Button
-                  onClick={handleOpenPix}
-                  className="flex-1 bg-gradient-to-r from-pink-500 to-purple-500 hover:from-pink-600 hover:to-purple-600 text-white font-semibold shadow-lg transition-all duration-300"
-                  size="lg"
-                >
-                  <Heart className="w-5 h-5 mr-2" />
-                  Fazer um PIX ❤️
-                </Button>
-
-                <Button
-                  onClick={handleCopyPix}
-                  variant="outline"
-                  className="flex-1 border-pink-500/30 hover:bg-pink-500/10"
-                  size="lg"
-                >
-                  {pixCopied ? (
-                    <>
-                      <CheckCircle2 className="w-5 h-5 mr-2" />
-                      Copiado!
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="w-5 h-5 mr-2" />
-                      Copiar Código
-                    </>
-                  )}
-                </Button>
-              </div>
+              <Button
+                onClick={handleCopyPix}
+                className="w-full bg-gradient-to-r from-pink-500 to-purple-500 hover:from-pink-600 hover:to-purple-600 text-white font-semibold shadow-lg transition-all duration-300"
+                size="lg"
+              >
+                {pixCopied ? (
+                  <>
+                    <CheckCircle2 className="w-5 h-5 mr-2" />
+                    Código PIX Copiado!
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-5 h-5 mr-2" />
+                    Copiar Código PIX
+                  </>
+                )}
+              </Button>
 
               <p className="text-[10px] sm:text-xs text-center text-muted-foreground">
-                Clique em "Fazer um PIX" para tentar abrir no seu app de banco, ou copie o código manualmente
+                Após copiar, cole no seu app de banco na opção PIX Copia e Cola
               </p>
             </CardContent>
           </Card>
