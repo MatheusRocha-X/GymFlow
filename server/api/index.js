@@ -185,10 +185,15 @@ export default async function handler(req, res) {
   }
 
   const { method, url } = req;
-  const path = url?.split('?')[0] || '/';
+  let path = url?.split('?')[0] || '/';
+  
+  // Remover prefixo /api se existir (Vercel pode incluir ou não)
+  if (path.startsWith('/api')) {
+    path = path.substring(4) || '/';
+  }
 
-  // Health check
-  if (method === 'GET' && path === '/api') {
+  // Health check - aceita / ou /api
+  if (method === 'GET' && path === '/') {
     return res.status(200).json({
       status: 'ok',
       message: 'GymApp Backend Running',
@@ -198,7 +203,7 @@ export default async function handler(req, res) {
   }
 
   // Telegram config
-  if (method === 'POST' && path === '/api/telegram/config') {
+  if (method === 'POST' && path === '/telegram/config') {
     const { chatId, dailyMotivationEnabled, dailyMotivationTime } = req.body;
     
     userSettings.set(chatId, {
@@ -212,7 +217,7 @@ export default async function handler(req, res) {
   }
 
   // Create/Update reminder
-  if (method === 'POST' && path === '/api/reminders') {
+  if (method === 'POST' && path === '/reminders') {
     const reminder = {
       id: req.body.id || Date.now(),
       chatId: req.body.chatId,
@@ -238,14 +243,14 @@ export default async function handler(req, res) {
   }
 
   // List reminders
-  if (method === 'GET' && path.startsWith('/api/reminders/')) {
+  if (method === 'GET' && path.startsWith('/reminders/')) {
     const chatId = path.split('/').pop();
     const userReminders = reminders.filter(r => r.chatId === chatId);
     return res.status(200).json(userReminders);
   }
 
   // Delete reminder
-  if (method === 'DELETE' && path.startsWith('/api/reminders/')) {
+  if (method === 'DELETE' && path.startsWith('/reminders/')) {
     const id = parseInt(path.split('/').pop() || '0');
     const index = reminders.findIndex(r => r.id === id);
     
