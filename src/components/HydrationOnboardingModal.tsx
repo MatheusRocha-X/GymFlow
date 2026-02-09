@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Droplet, X, Bell } from 'lucide-react';
 import { db } from '@/lib/db';
+import { telegramService } from '@/lib/telegram';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Card } from './ui/card';
@@ -15,6 +16,8 @@ export function HydrationOnboardingModal({ onClose, onComplete }: HydrationOnboa
   const [dailyGoal, setDailyGoal] = useState('3.0');
   const [glassSize, setGlassSize] = useState(300);
   const [reminderInterval, setReminderInterval] = useState(60);
+  const [startHour, setStartHour] = useState(7);
+  const [endHour, setEndHour] = useState(22);
 
   const requestNotificationPermission = async () => {
     if (!('Notification' in window)) {
@@ -50,6 +53,8 @@ export function HydrationOnboardingModal({ onClose, onComplete }: HydrationOnboa
         dailyGoalLiters: parseFloat(dailyGoal),
         glassSize: glassSize,
         reminderInterval: reminderInterval,
+        startHour: startHour,
+        endHour: endHour,
         onboardingCompleted: true
       });
     } else {
@@ -58,8 +63,8 @@ export function HydrationOnboardingModal({ onClose, onComplete }: HydrationOnboa
         dailyGoalLiters: parseFloat(dailyGoal),
         glassSize: glassSize,
         reminderInterval: reminderInterval,
-        startHour: 7,
-        endHour: 22,
+        startHour: startHour,
+        endHour: endHour,
         onboardingCompleted: true
       });
     }
@@ -77,12 +82,17 @@ export function HydrationOnboardingModal({ onClose, onComplete }: HydrationOnboa
   };
 
   const createHydrationReminders = async () => {
-    // Create recurring hydration reminder
+    // Create recurring hydration reminder starting at user's preferred time
     const now = new Date();
     const reminderTime = new Date();
-    reminderTime.setHours(7, 0, 0, 0); // Start at 7 AM
+    reminderTime.setHours(startHour, 0, 0, 0); // Use user's start hour
+    
+    // If the start hour already passed today, set for tomorrow
+    if (reminderTime < now) {
+      reminderTime.setDate(reminderTime.getDate() + 1);
+    }
 
-    await db.reminders.add({
+    const id = await db.reminders.add({
       type: 'hydration',
       title: 'Hora de hidratar!',
       message: `Beba 1 copo (${glassSize}ml) de água agora.`,
@@ -92,6 +102,28 @@ export function HydrationOnboardingModal({ onClose, onComplete }: HydrationOnboa
       createdAt: now,
       nextTrigger: reminderTime
     });
+    
+    console.log(`💧 Lembrete de hidratação criado com ID ${id} para ${startHour}:00h todos os dias`);
+    console.log(`📅 Próximo disparo: ${reminderTime.toISOString()}`);
+    
+    // Verify it was saved
+    const saved = await db.reminders.get(id);
+    console.log('🔍 Lembrete salvo:', {
+      id: saved?.id,
+      enabled: saved?.enabled,
+      nextTrigger: saved?.nextTrigger
+    });
+    
+    // Send Telegram confirmation
+    try {
+      await telegramService.sendReminder(
+        '✅ Lembrete de Hidratação Criado',
+        `Você será lembrado de beber água a cada ${reminderInterval} minutos, das ${startHour}h às ${endHour}h.\nCopo: ${glassSize}ml\nMeta diária: ${dailyGoal}L`,
+        '💧'
+      );
+    } catch (error) {
+      console.error('Erro ao enviar confirmação via Telegram:', error);
+    }
   };
 
   return (
@@ -226,13 +258,45 @@ export function HydrationOnboardingModal({ onClose, onComplete }: HydrationOnboa
                 </div>
               </div>
 
+              <div>
+                <label className="text-sm font-medium mb-2 block">
+                  Horário dos lembretes
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">Começar às</label>
+                    <select
+                      value={startHour}
+                      onChange={(e) => setStartHour(Number(e.target.value))}
+                      className="w-full h-12 px-3 rounded-md border border-input bg-background text-center font-semibold"
+                    >
+                      {Array.from({ length: 24 }, (_, i) => (
+                        <option key={i} value={i}>{i}:00</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">Parar às</label>
+                    <select
+                      value={endHour}
+                      onChange={(e) => setEndHour(Number(e.target.value))}
+                      className="w-full h-12 px-3 rounded-md border border-input bg-background text-center font-semibold"
+                    >
+                      {Array.from({ length: 24 }, (_, i) => (
+                        <option key={i} value={i}>{i}:00</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
               <div className="p-4 bg-primary/10 border border-primary/20 rounded-lg">
                 <div className="flex items-start gap-3">
                   <Bell className="w-5 h-5 text-primary mt-0.5" />
                   <div className="text-sm">
                     <p className="font-medium mb-1">Os lembretes funcionarão:</p>
                     <ul className="space-y-1">
-                      <li>• Das 7h às 22h (não perturba seu sono)</li>
+                      <li>• Das {startHour}h às {endHour}h</li>
                       <li>• A cada {reminderInterval} minutos</li>
                       <li>• Mesmo com o app fechado</li>
                       <li>• Você pode pausar quando quiser</li>

@@ -70,7 +70,7 @@ export function TelegramOnboarding({ onComplete, onSkip }: TelegramOnboardingPro
         enabled: true,
         chatId: chatId.trim(),
         dailyMotivationEnabled: true,
-        dailyMotivationTime: '08:00',
+        dailyMotivationTime: '07:00',
         setupCompleted: true
       });
 
@@ -89,7 +89,7 @@ export function TelegramOnboarding({ onComplete, onSkip }: TelegramOnboardingPro
         enabled: false,
         chatId: '',
         dailyMotivationEnabled: false,
-        dailyMotivationTime: '08:00',
+        dailyMotivationTime: '07:00',
         setupCompleted: true
       });
       onSkip();

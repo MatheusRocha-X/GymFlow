@@ -64,7 +64,7 @@ export function TelegramConfigModal({ onClose, onComplete }: TelegramConfigModal
         enabled: true,
         chatId: chatId.trim(),
         dailyMotivationEnabled: true,
-        dailyMotivationTime: '08:00', // 8 AM default
+        dailyMotivationTime: '07:00', // 7 AM default
         setupCompleted: true
       };
 

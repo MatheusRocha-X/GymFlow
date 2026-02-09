@@ -122,13 +122,23 @@ export function CreateReminderModal({ onClose, onComplete, editReminder }: Creat
         nextTrigger: new Date(time)
       };
 
-      console.log('Salvando lembrete:', reminderData);
+      console.log('💾 Salvando lembrete:', reminderData);
 
       if (editReminder?.id) {
         await db.reminders.update(editReminder.id, reminderData);
+        console.log('✅ Lembrete atualizado com ID:', editReminder.id);
       } else {
         const id = await db.reminders.add(reminderData);
-        console.log('Lembrete criado com ID:', id);
+        console.log('✅ Lembrete criado com ID:', id);
+        
+        // Verify it was saved
+        const saved = await db.reminders.get(id);
+        console.log('🔍 Verificando lembrete salvo:', {
+          id: saved?.id,
+          title: saved?.title,
+          enabled: saved?.enabled,
+          nextTrigger: saved?.nextTrigger
+        });
         
         // Send Telegram notification about reminder creation
         try {

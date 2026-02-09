@@ -51,11 +51,67 @@ function App() {
     // Will only start if Telegram is configured
     notificationService.startMonitoring();
 
+    // Debug helpers (accessible in console)
+    (window as any).debugReminders = async () => {
+      console.log('🔍 === DEBUG REMINDERS ===');
+      const reminders = await db.reminders.toArray();
+      console.log(`Total reminders: ${reminders.length}`);
+      reminders.forEach(r => {
+        console.log(`
+📌 ${r.title}
+   ID: ${r.id}
+   Enabled: ${r.enabled}
+   Type: ${r.type}
+   Recurrence: ${r.recurrence}
+   Time: ${r.time}
+   Next Trigger: ${r.nextTrigger}
+        `);
+      });
+      return reminders;
+    };
+
+    (window as any).testReminder = async (minutesFromNow = 2) => {
+      console.log(`🧪 Creating test reminder for ${minutesFromNow} minutes from now...`);
+      const triggerTime = new Date();
+      triggerTime.setMinutes(triggerTime.getMinutes() + minutesFromNow);
+      
+      const id = await db.reminders.add({
+        type: 'custom',
+        title: 'TESTE - Lembrete',
+        message: 'Este é um lembrete de teste!',
+        time: triggerTime,
+        recurrence: 'none',
+        enabled: true,
+        createdAt: new Date(),
+        nextTrigger: triggerTime
+      });
+      
+      console.log(`✅ Test reminder created with ID: ${id}`);
+      console.log(`📅 Will trigger at: ${triggerTime.toLocaleString('pt-BR')}`);
+      return id;
+    };
+
+    (window as any).clearProcessedReminders = () => {
+      // @ts-ignore - accessing private property for debugging
+      const count = notificationService['processedReminders']?.size || 0;
+      // @ts-ignore
+      notificationService['processedReminders']?.clear();
+      console.log(`🧹 Cleared ${count} processed reminders from cache`);
+    };
+
+    console.log('💡 Debug commands available:');
+    console.log('   debugReminders() - List all reminders');
+    console.log('   testReminder(2) - Create test reminder in 2 minutes');
+    console.log('   clearProcessedReminders() - Clear processed cache');
+
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
       notificationService.stopMonitoring();
+      delete (window as any).debugReminders;
+      delete (window as any).testReminder;
+      delete (window as any).clearProcessedReminders;
     };
   }, [setOnline, setInstallPromptEvent]);
 

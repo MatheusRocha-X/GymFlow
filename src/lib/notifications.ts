@@ -6,6 +6,8 @@ export class NotificationService {
   private static instance: NotificationService;
   private checkInterval: number | null = null;
   private dailyMotivationInterval: number | null = null;
+  private isChecking: boolean = false;
+  private processedReminders: Set<string> = new Set();
 
   private constructor() {}
 
@@ -17,6 +19,14 @@ export class NotificationService {
   }
 
   async startMonitoring() {
+    // Prevent starting multiple monitoring sessions
+    if (this.checkInterval !== null) {
+      console.log('⚠️ Notification monitoring already running');
+      return;
+    }
+
+    console.log('Starting notification monitoring...');
+    
     // Check if Telegram is configured
     const telegramSettings = await db.telegramSettings.toArray();
     const hasTelegram = telegramSettings.length > 0 && telegramSettings[0].enabled;
@@ -26,16 +36,21 @@ export class NotificationService {
       return;
     }
 
+    console.log('Telegram configured. Setting up notification service...');
+
     // Configure telegram service
     telegramService.setConfig({
       chatId: telegramSettings[0].chatId,
       botToken: telegramSettings[0].botToken
     });
 
-    // Check reminders every minute
+    // Clear any previously processed reminders when starting fresh
+    this.processedReminders.clear();
+
+    // Check reminders every 30 seconds for more responsiveness
     this.checkInterval = window.setInterval(() => {
       this.checkReminders();
-    }, 60000); // Check every 1 minute
+    }, 30000); // Check every 30 seconds
 
     // Setup daily motivational messages
     if (telegramSettings[0].dailyMotivationEnabled) {
@@ -43,8 +58,9 @@ export class NotificationService {
     }
 
     // Also check immediately
-    this.checkReminders();
-    this.checkDailyMotivation();
+    console.log('Running initial reminder check...');
+    await this.checkReminders();
+    await this.checkDailyMotivation();
   }
 
   stopMonitoring() {
@@ -56,6 +72,9 @@ export class NotificationService {
       clearInterval(this.dailyMotivationInterval);
       this.dailyMotivationInterval = null;
     }
+    this.isChecking = false;
+    this.processedReminders.clear();
+    console.log('🛑 Notification monitoring stopped');
   }
 
   private setupDailyMotivation() {
@@ -98,21 +117,66 @@ export class NotificationService {
   }
 
   private async checkReminders() {
+    // Prevent concurrent checks
+    if (this.isChecking) {
+      console.log('⏸️ Already checking reminders, skipping...');
+      return;
+    }
+
+    this.isChecking = true;
+
     try {
       const now = new Date();
-      const reminders = await db.reminders
-        .where('enabled')
-        .equals(1)
-        .toArray();
+      
+      // Get ALL reminders and filter in code (more reliable than indexed query)
+      const allReminders = await db.reminders.toArray();
+      const reminders = allReminders.filter(r => r.enabled);
+
+      console.log(`🔍 Found ${allReminders.length} total reminders, ${reminders.length} active at ${now.toISOString()}`);
+      
+      if (reminders.length > 0) {
+        console.log('Active reminders:', reminders.map(r => ({
+          id: r.id,
+          title: r.title,
+          enabled: r.enabled,
+          nextTrigger: r.nextTrigger,
+          recurrence: r.recurrence
+        })));
+      }
 
       for (const reminder of reminders) {
+        // Generate unique key for this reminder + trigger time
+        const reminderKey = `${reminder.id}-${reminder.nextTrigger}`;
+        
+        // Skip if already processed in this session
+        if (this.processedReminders.has(reminderKey)) {
+          console.log(`⏭️ Already processed: ${reminder.title}`);
+          continue;
+        }
+
         if (this.shouldTriggerReminder(reminder, now)) {
-          await this.sendNotification(reminder);
+          console.log(`🔔 Triggering reminder NOW: ${reminder.title}`);
+          
+          // Mark as processed IMMEDIATELY
+          this.processedReminders.add(reminderKey);
+          
+          // Update nextTrigger FIRST to prevent duplicates
           await this.updateNextTrigger(reminder);
+          
+          // Then send notification
+          await this.sendNotification(reminder);
+          
+          // Clean up old processed reminders (keep only last 100)
+          if (this.processedReminders.size > 100) {
+            const entries = Array.from(this.processedReminders);
+            this.processedReminders = new Set(entries.slice(-100));
+          }
         }
       }
     } catch (error) {
       console.error('Error checking reminders:', error);
+    } finally {
+      this.isChecking = false;
     }
   }
 
@@ -120,8 +184,33 @@ export class NotificationService {
     const reminderTime = new Date(reminder.time);
     const nextTrigger = reminder.nextTrigger ? new Date(reminder.nextTrigger) : reminderTime;
 
-    // Check if it's time to trigger
-    if (now < nextTrigger) {
+    // Calculate time difference in seconds
+    const timeDiffMs = now.getTime() - nextTrigger.getTime();
+    const timeDiffSec = timeDiffMs / 1000;
+
+    console.log(`Checking reminder: ${reminder.title}`, {
+      now: now.toISOString(),
+      nextTrigger: nextTrigger.toISOString(),
+      timeDiffSec: timeDiffSec.toFixed(1) + 's',
+      shouldTrigger: timeDiffSec >= 0 && timeDiffSec <= 60
+    });
+
+    // Trigger if we're within 60 seconds AFTER the scheduled time
+    // This prevents: 
+    //   - Triggering too early (negative timeDiff)
+    //   - Triggering repeatedly if missed (more than 60s old)
+    if (timeDiffSec < 0) {
+      // Too early - not time yet
+      return false;
+    }
+
+    if (timeDiffSec > 60) {
+      // Too late - missed window, skip to avoid spam
+      console.log(`⚠️ Reminder "${reminder.title}" missed trigger window (${timeDiffSec.toFixed(0)}s late). Skipping to next.`);
+      // Update to next trigger without sending
+      this.updateNextTrigger(reminder).catch(err => 
+        console.error('Error updating missed reminder:', err)
+      );
       return false;
     }
 
@@ -129,6 +218,7 @@ export class NotificationService {
     if (reminder.recurrence === 'weekly' && reminder.daysOfWeek) {
       const currentDay = now.getDay();
       if (!reminder.daysOfWeek.includes(currentDay)) {
+        console.log(`Skipping weekly reminder - wrong day. Current: ${currentDay}, Expected: ${reminder.daysOfWeek}`);
         return false;
       }
     }
@@ -150,6 +240,7 @@ export class NotificationService {
       const emoji = emojiMap[reminder.type] || '⏰';
 
       // Send via Telegram
+      console.log(`📤 Sending Telegram notification for: ${reminder.title}`);
       const success = await telegramService.sendReminder(
         reminder.title,
         reminder.message,
@@ -157,9 +248,9 @@ export class NotificationService {
       );
 
       if (success) {
-        console.log('Reminder sent via Telegram:', reminder.title);
+        console.log('✅ Reminder sent via Telegram:', reminder.title);
       } else {
-        console.error('Failed to send reminder via Telegram');
+        console.error('❌ Failed to send reminder via Telegram');
       }
     } catch (error) {
       console.error('Error sending notification:', error);
@@ -170,30 +261,58 @@ export class NotificationService {
     if (!reminder.id) return;
 
     const now = new Date();
+    const reminderTime = new Date(reminder.time);
     let nextTrigger: Date;
+
+    console.log(`⏭️ Updating next trigger for: ${reminder.title}`);
 
     switch (reminder.recurrence) {
       case 'daily':
-        nextTrigger = new Date(reminder.time);
-        nextTrigger.setDate(now.getDate() + 1);
+        // Set next trigger to same time tomorrow
+        nextTrigger = new Date(reminderTime);
+        nextTrigger.setDate(now.getDate());
+        nextTrigger.setHours(reminderTime.getHours(), reminderTime.getMinutes(), 0, 0);
+        
+        // If already passed today, set for tomorrow
+        if (nextTrigger <= now) {
+          nextTrigger.setDate(nextTrigger.getDate() + 1);
+        }
         break;
 
       case 'weekly':
-        nextTrigger = new Date(reminder.time);
-        nextTrigger.setDate(now.getDate() + 7);
+        // Set next trigger to same time next week
+        nextTrigger = new Date(reminderTime);
+        nextTrigger.setDate(now.getDate());
+        nextTrigger.setHours(reminderTime.getHours(), reminderTime.getMinutes(), 0, 0);
+        
+        // If already passed today, set for next week
+        if (nextTrigger <= now) {
+          nextTrigger.setDate(nextTrigger.getDate() + 7);
+        }
         break;
 
       case 'monthly':
-        nextTrigger = new Date(reminder.time);
-        nextTrigger.setMonth(now.getMonth() + 1);
+        // Set next trigger to same time next month
+        nextTrigger = new Date(reminderTime);
+        nextTrigger.setMonth(now.getMonth());
+        nextTrigger.setHours(reminderTime.getHours(), reminderTime.getMinutes(), 0, 0);
+        
+        // If already passed this month, set for next month
+        if (nextTrigger <= now) {
+          nextTrigger.setMonth(nextTrigger.getMonth() + 1);
+        }
         break;
 
       default:
         // For 'none', disable the reminder after triggering
         await db.reminders.update(reminder.id, { enabled: false });
+        console.log(`🔕 One-time reminder completed and disabled: ${reminder.title}`);
         return;
     }
 
+    console.log(`📅 Next trigger for "${reminder.title}":`);
+    console.log(`   UTC: ${nextTrigger.toISOString()}`);
+    console.log(`   Local: ${nextTrigger.toLocaleString('pt-BR')}`);
     await db.reminders.update(reminder.id, { nextTrigger });
   }
 
