@@ -2,7 +2,7 @@
   "name": "gymapp-server",
   "version": "1.0.0",
   "description": "Backend para lembretes do GymApp",
-  "main": "index.js",
+  "main": "api/index.js",
   "type": "module",
   "scripts": {
     "start": "node index.js",
