@@ -31,7 +31,9 @@ class ApiService {
         signal: AbortSignal.timeout(5000) // 5 segundos timeout
       });
       
+      console.log('🔍 Response status:', response.status);
       const data = await response.json();
+      console.log('🔍 Response data:', data);
       this.useBackend = data.status === 'ok';
       
       if (this.useBackend) {
