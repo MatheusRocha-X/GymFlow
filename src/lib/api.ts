@@ -26,7 +26,7 @@ class ApiService {
     this.checking = true;
 
     try {
-      const response = await fetch(`${API_URL}/`, { 
+      const response = await fetch(`${API_URL}/api`, { 
         method: 'GET',
         signal: AbortSignal.timeout(5000) // 5 segundos timeout
       });
