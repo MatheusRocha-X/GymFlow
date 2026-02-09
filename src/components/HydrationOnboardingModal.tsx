@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Droplet, X, Bell } from 'lucide-react';
 import { db } from '@/lib/db';
 import { telegramService } from '@/lib/telegram';
+import { apiService } from '@/lib/api';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Card } from './ui/card';
@@ -92,16 +93,23 @@ export function HydrationOnboardingModal({ onClose, onComplete }: HydrationOnboa
       reminderTime.setDate(reminderTime.getDate() + 1);
     }
 
-    const id = await db.reminders.add({
-      type: 'hydration',
-      title: 'Hora de hidratar!',
-      message: `Beba 1 copo (${glassSize}ml) de água agora.`,
-      time: reminderTime,
-      recurrence: 'daily',
-      enabled: true,
-      createdAt: now,
-      nextTrigger: reminderTime
-    });
+    let id: number;
+    try {
+      id = await apiService.saveReminder({
+        type: 'hydration',
+        title: 'Hora de hidratar!',
+        message: `Beba 1 copo (${glassSize}ml) de água agora.`,
+        time: reminderTime,
+        recurrence: 'daily',
+        enabled: true,
+        createdAt: now,
+        nextTrigger: reminderTime
+      }) as number;
+    } catch (error: any) {
+      console.error('Erro ao criar lembrete de hidratação:', error);
+      alert(error.message || 'Erro ao criar lembrete. Verifique se o backend está configurado.');
+      return;
+    }
     
     console.log(`💧 Lembrete de hidratação criado com ID ${id} para ${startHour}:00h todos os dias`);
     console.log(`📅 Próximo disparo: ${reminderTime.toISOString()}`);

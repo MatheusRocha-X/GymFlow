@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Bell, Plus, Droplet, Trash2, Edit2, Clock, ToggleLeft, ToggleRight } from 'lucide-react';
+import { Bell, Plus, Droplet, Trash2, Edit2, Clock, ToggleLeft, ToggleRight, AlertCircle } from 'lucide-react';
 import { db, type Reminder } from '@/lib/db';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { telegramService } from '@/lib/telegram';
+import { apiService } from '@/lib/api';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { HydrationOnboardingModal } from '@/components/HydrationOnboardingModal';
@@ -86,8 +87,14 @@ export default function RemindersPage() {
       // Get reminder info before deleting
       const reminder = await db.reminders.get(id);
       
-      // Delete from database
-      await db.reminders.delete(id);
+      // Delete from database (local + backend)
+      try {
+        await apiService.deleteReminder(id);
+      } catch (error: any) {
+        console.error('Erro ao deletar lembrete:', error);
+        alert(error.message || 'Erro ao deletar lembrete. Verifique se o backend está configurado.');
+        return;
+      }
       
       // Send Telegram confirmation
       if (reminder) {
@@ -208,6 +215,18 @@ export default function RemindersPage() {
           )}
         </Button>
       </div>
+
+      {/* Important Notice */}
+      {reminders && reminders.length > 0 && (
+        <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-2 sm:p-3 animate-slide-up">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
+            <p className="text-[10px] sm:text-xs text-muted-foreground">
+              <strong className="text-blue-500">Dica:</strong> Mantenha o app aberto (pode estar minimizado) para receber os lembretes no Telegram.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Hydration Progress Card */}
       {hydrationSettings?.enabled && (

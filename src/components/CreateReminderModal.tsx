@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { X, Bell, Droplet, Dumbbell, Pill, Activity } from 'lucide-react';
 import { db, type Reminder } from '@/lib/db';
 import { telegramService } from '@/lib/telegram';
+import { apiService } from '@/lib/api';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Textarea } from './ui/textarea';
@@ -124,13 +125,17 @@ export function CreateReminderModal({ onClose, onComplete, editReminder }: Creat
 
       console.log('💾 Salvando lembrete:', reminderData);
 
-      if (editReminder?.id) {
-        await db.reminders.update(editReminder.id, reminderData);
-        console.log('✅ Lembrete atualizado com ID:', editReminder.id);
-      } else {
-        const id = await db.reminders.add(reminderData);
-        console.log('✅ Lembrete criado com ID:', id);
-        
+      try {
+        let id: number | undefined;
+        if (editReminder?.id) {
+          await apiService.saveReminder({ ...reminderData, id: editReminder.id });
+          console.log('✅ Lembrete atualizado com ID:', editReminder.id);
+          id = editReminder.id;
+        } else {
+          id = await apiService.saveReminder(reminderData) as number;
+          console.log('✅ Lembrete criado com ID:', id);
+        }
+
         // Verify it was saved
         const saved = await db.reminders.get(id);
         console.log('🔍 Verificando lembrete salvo:', {
@@ -151,13 +156,15 @@ export function CreateReminderModal({ onClose, onComplete, editReminder }: Creat
           console.error('Erro ao enviar notificação do Telegram:', error);
           // Don't fail the reminder creation if Telegram fails
         }
-      }
 
-      console.log('Chamando onComplete');
-      onComplete();
-    } catch (error) {
-      console.error('Erro ao salvar lembrete:', error);
-      alert('Erro ao salvar lembrete. Tente novamente.');
+        console.log('Chamando onComplete');
+        onComplete();
+      } catch (error: any) {
+        console.error('Erro ao salvar lembrete:', error);
+        alert(error.message || 'Erro ao salvar lembrete. Verifique se o backend está configurado.');
+      } finally {
+        setLoading(false);
+      }
     } finally {
       setLoading(false);
     }
